@@ -1,0 +1,28 @@
+# Dependencies / build
+node_modules/
+dist/
+release/
+
+# ADDEG runtime data (do not commit)
+inbox/
+output/
+.addeg/
+
+# Local config variants
+addeg.config.json
+!presets/**/addeg.config.json
+addeg.config.local.json
+*.local.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

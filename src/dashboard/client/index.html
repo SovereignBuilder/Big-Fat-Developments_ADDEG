@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADDEG Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1 id="app-title">Dev Diary</h1>
+    <div class="date-control">
+      <button id="prev-date">←</button>
+      <input type="date" id="current-date">
+      <button id="next-date">→</button>
+    </div>
+    <div class="header-actions">
+      <button id="compile-btn" class="secondary-btn" title="Compile today's notes into a Markdown file">Compile Entry</button>
+      <button id="theme-toggle" class="theme-btn" aria-label="Toggle Dark Mode">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left Column: Input -->
+    <section class="panel input-panel">
+      <div class="panel-header">
+        <h2>Capture Note</h2>
+        <button id="edit-mode-btn" class="text-btn" title="Load current inbox into editor to modify existing entries">Edit Existing</button>
+      </div>
+      <div class="input-group">
+        <textarea id="note-input" placeholder="Type your note here... (ctx: working on X)"></textarea>
+        <div class="quick-actions">
+          <button data-prefix="ctx: " class="tag ctx" title="Context: What are you working on? What is the current state?">Context</button>
+          <button data-prefix="act: " class="tag act" title="Action: What did you just do? What changed?">Action</button>
+          <button data-prefix="obs: " class="tag obs" title="Observation: What did you notice? Thoughts, feelings, metrics.">Observation</button>
+          <button data-prefix="open: " class="tag open" title="Open Thread: Questions or ideas to revisit later.">Open Thread</button>
+        </div>
+        <button id="submit-btn" class="primary-btn" title="Save these notes to your daily inbox (Ctrl+Enter)">Add Note (Ctrl+Enter)</button>
+      </div>
+    </section>
+
+    <!-- Right Column: Feed -->
+    <section class="panel feed-panel">
+      <h2>Inbox Feed</h2>
+      <div id="feed-list" class="feed-list">
+        <!-- Items injected here -->
+        <p class="loading">Loading...</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

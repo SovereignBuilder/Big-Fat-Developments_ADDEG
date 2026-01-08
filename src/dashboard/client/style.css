@@ -1,0 +1,86 @@
+/* Simple Reset */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-color: #f4f4f9;
+  --text-color: #333;
+  --panel-bg: #fff;
+  --header-bg: #fff;
+  --border-color: #ddd;
+  --input-bg: #fff;
+  --feed-item-bg: #fafafa;
+}
+
+[data-theme="dark"] {
+  --bg-color: #1a1a1a;
+  --text-color: #e0e0e0;
+  --panel-bg: #2d2d2d;
+  --header-bg: #252525;
+  --border-color: #444;
+  --input-bg: #333;
+  --feed-item-bg: #333;
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; transition: background 0.3s, color 0.3s; }
+
+/* Layout */
+header { background: var(--header-bg); padding: 1rem 2rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+main { flex: 1; display: flex; padding: 2rem; gap: 2rem; max-width: 1200px; margin: 0 auto; width: 100%; }
+.panel { background: var(--panel-bg); border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 5px rgba(0,0,0,0.2); flex: 1; display: flex; flex-direction: column; }
+.panel h2 { margin-bottom: 1rem; font-size: 1.2rem; color: var(--text-color); opacity: 0.8; }
+
+/* Panel Headers */
+.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.panel h2 { margin-bottom: 0; }
+
+/* Text Button */
+.text-btn { background: none; border: 1px solid var(--border-color); color: var(--text-color); font-size: 0.85rem; padding: 0.2rem 0.6rem; opacity: 0.7; }
+.text-btn:hover { opacity: 1; background: var(--border-color); }
+.text-btn.active { background: #ff9800; color: white; border-color: #ff9800; opacity: 1; }
+.warning-btn { background: #ff9800 !important; color: white; }
+.warning-btn:hover { background: #f57c00 !important; }
+
+/* Date Control */
+.date-control { display: flex; gap: 0.5rem; }
+input[type="date"] { padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color); }
+
+/* Header Actions */
+.header-actions { display: flex; gap: 1rem; align-items: center; }
+.secondary-btn { background: var(--border-color); color: var(--text-color); font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+.secondary-btn:hover { background: #bbb; }
+[data-theme="dark"] .secondary-btn:hover { background: #555; }
+
+/* Theme Toggle */
+.theme-btn { background: transparent; font-size: 1.2rem; padding: 0.5rem; cursor: pointer; border: none; }
+
+/* Input Area */
+.input-group { display: flex; flex-direction: column; flex: 1; gap: 1rem; }
+textarea { flex: 1; padding: 1rem; border: 1px solid var(--border-color); border-radius: 4px; resize: none; font-family: inherit; font-size: 1rem; background: var(--input-bg); color: var(--text-color); }
+textarea:focus { outline: 2px solid #007bff; border-color: transparent; }
+
+/* Buttons */
+.quick-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+button { cursor: pointer; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 500; transition: opacity 0.2s; position: relative; }
+button:hover { opacity: 0.8; }
+/* Tooltip styles */
+[title] { position: relative; }
+
+.primary-btn { background: #007bff; color: white; padding: 0.75rem; font-size: 1rem; }
+
+/* Tags */
+.tag { font-size: 0.85rem; }
+.tag.ctx { background: #e3f2fd; color: #1565c0; }
+.tag.act { background: #e8f5e9; color: #2e7d32; }
+.tag.obs { background: #fff3e0; color: #ef6c00; }
+.tag.open { background: #fce4ec; color: #c2185b; }
+
+/* Feed */
+.feed-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.75rem; }
+.feed-item { padding: 0.75rem; border-radius: 6px; border-left: 4px solid var(--border-color); background: var(--feed-item-bg); }
+.feed-item.context { border-left-color: #2196f3; }
+.feed-item.actions { border-left-color: #4caf50; }
+.feed-item.observations { border-left-color: #ff9800; }
+.feed-item.openThreads { border-left-color: #e91e63; }
+
+.meta { font-size: 0.75rem; color: var(--text-color); opacity: 0.6; margin-bottom: 0.25rem; display: flex; justify-content: space-between; }
+.content { font-size: 0.95rem; line-height: 1.4; white-space: pre-wrap; }

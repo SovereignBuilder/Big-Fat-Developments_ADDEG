@@ -1,0 +1,19 @@
+{
+  "projectName": "MyDevDiary",
+  "repoRoot": ".",
+  "inboxDir": "./inbox",
+  "dashboard": {
+    "enabled": true,
+    "port": 7825,
+    "host": "localhost",
+    "autoOpen": true,
+    "title": "ADDEG Dashboard"
+  },
+  "collections": {
+    "devDiary": {
+      "outputDir": "./output",
+      "templatePath": "./templates/default/dev-diary.md",
+      "draftDefault": true
+    }
+  }
+}

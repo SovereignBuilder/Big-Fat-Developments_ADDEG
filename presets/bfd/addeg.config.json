@@ -1,0 +1,35 @@
+{
+  "projectName": "BFDwebsite",
+  "repoRoot": ".",
+  "inboxDir": "./inbox",
+  "collections": {
+    "devDiary": {
+      "outputDir": "C:/Dev/BFDwebsite/src/content/dev-diary",
+      "templatePath": "./templates/default/dev-diary.md",
+      "draftDefault": true,
+      "rules": {
+        "titleRegex": "^\\d{4}-\\d{2}-\\d{2} - .+",
+        "titleFormatHelp": "Use: YYYY-MM-DD - concise action phrase",
+        "excerpt": {
+          "min": 10,
+          "max": 100
+        },
+        "topics": {
+          "allowed": [
+            "tooling",
+            "prompts",
+            "automation",
+            "site-build",
+            "content-pipeline",
+            "experiments",
+            "failures",
+            "learnings",
+            "open-threads",
+            "research"
+          ],
+          "minCount": 1
+        }
+      }
+    }
+  }
+}
