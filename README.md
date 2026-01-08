@@ -22,7 +22,7 @@ Note: Node.js (v18+) is required.
 
 ```powershell
 # Clone repo
-git clone <repo-url>
+git clone https://github.com/SovereignBuilder/Big-Fat-Developments_ADDEG
 cd addeg
 
 # Install dependencies
