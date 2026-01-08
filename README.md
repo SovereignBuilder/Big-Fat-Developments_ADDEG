@@ -9,6 +9,13 @@ Config-driven, local-first CLI for capturing small notes throughout the day and 
 - **Inbox:** Captures “events” into an append-only **JSONL inbox** (safe, structured).
 - **Compiler:** Compiles events into a **templated Markdown** entry with frontmatter.
 
+## What this is not
+
+- **Not a hosted service:** You run it. You own the data.
+- **Not supported long-term:** This is a "seed" tool provided as-is.
+- **No telemetry:** We don't track you.
+- **No cloud dependencies:** Works 100% offline.
+
 ## Quickstart (Windows)
 
 For non-developers or quick usage:
