@@ -37,7 +37,7 @@ export async function dashboardRoutes(fastify: FastifyInstance, options: RouteOp
   });
 
   // PUT /api/inbox - Rewrite entire inbox for date (Edit Mode)
-  fastify.put<{ Body: { events: Array<{section: string, text: string}>; date?: string } }>("/api/inbox", async (request) => {
+  fastify.put<{ Body: { events: Array<{section: string, text: string, ts?: string}>; date?: string } }>("/api/inbox", async (request) => {
     const { events, date } = request.body;
     if (!Array.isArray(events)) throw new Error("Events array required");
     
@@ -57,7 +57,7 @@ export async function dashboardRoutes(fastify: FastifyInstance, options: RouteOp
     // Reconstruct file content
     const lines = events.map(e => {
         return JSON.stringify({
-            ts: nowIso(), // Update timestamp or preserve? Ideally preserve, but simple overwrite is fine for now.
+            ts: e.ts || nowIso(),
             date: ymd,
             section: e.section,
             text: e.text

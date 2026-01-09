@@ -6,6 +6,7 @@ const d = new Date();
 const offsetMs = d.getTimezoneOffset() * 60 * 1000;
 const localIso = new Date(d.getTime() - offsetMs).toISOString().split('T')[0];
 let currentDate = localIso;
+let currentEvents = []; // Store events locally for inline editing
 
 // DOM Elements
 const els = {
@@ -49,6 +50,9 @@ async function init() {
   els.prevDate.addEventListener('click', () => adjustDate(-1));
   els.nextDate.addEventListener('click', () => adjustDate(1));
   
+  // Feed Delegation for Inline Edit
+  els.feedList.addEventListener('click', handleFeedClick);
+
   // Quick Actions (Prefixes)
   els.quickActions.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -91,7 +95,8 @@ async function loadInbox() {
   try {
     const res = await fetch(`${API_BASE}/inbox?date=${currentDate}`);
     const data = await res.json();
-    renderFeed(data.events);
+    currentEvents = data.events || [];
+    renderFeed(currentEvents);
   } catch (err) {
     els.feedList.innerHTML = `<p class="error">Error loading inbox: ${err.message}</p>`;
   }
@@ -103,23 +108,101 @@ function renderFeed(events) {
     return;
   }
 
-  els.feedList.innerHTML = events.map(e => {
+  els.feedList.innerHTML = events.map((e, index) => {
     // Map standard sections to short prefixes for reconstruction
     const map = { context: 'ctx:', actions: 'act:', observations: 'obs:', openThreads: 'open:' };
     const prefix = map[e.section] || 'act:';
     
     const time = e.ts.includes('T') ? e.ts.split('T')[1].slice(0, 5) : e.ts;
     return `
-      <div class="feed-item ${e.section}" data-raw="${prefix} ${escapeHtml(e.text)}">
+      <div class="feed-item ${e.section}" id="event-${index}" data-index="${index}" data-raw="${prefix} ${escapeHtml(e.text)}">
         <div class="meta">
           <span class="time">${time}</span>
-          <span class="section">${e.section}</span>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <span class="section">${e.section}</span>
+            <button class="edit-btn" data-index="${index}" title="Edit this entry">✎</button>
+          </div>
         </div>
         <div class="content">${escapeHtml(e.text)}</div>
       </div>
     `;
   }).join('');
 }
+
+function handleFeedClick(e) {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+
+  if (btn.classList.contains('edit-btn')) {
+    const index = parseInt(btn.dataset.index, 10);
+    enterItemEditMode(index);
+  } else if (btn.classList.contains('save-btn')) {
+    const index = parseInt(btn.dataset.index, 10);
+    saveItem(index);
+  } else if (btn.classList.contains('cancel-btn')) {
+    const index = parseInt(btn.dataset.index, 10);
+    cancelItemEdit(index);
+  }
+}
+
+function enterItemEditMode(index) {
+  const itemEl = document.getElementById(`event-${index}`);
+  if (!itemEl) return;
+
+  const event = currentEvents[index];
+  const contentEl = itemEl.querySelector('.content');
+  
+  // Replace content with textarea
+  contentEl.innerHTML = 
+    `<textarea class="inline-editor" id="editor-${index}">${event.text}</textarea>
+    <div class="inline-actions">
+        <button class="cancel-btn" data-index="${index}">Cancel</button>
+        <button class="save-btn" data-index="${index}">💾 Save</button>
+    </div>
+  `;
+  
+  // Hide the main edit button to avoid confusion
+  const editBtn = itemEl.querySelector('.edit-btn');
+  if (editBtn) editBtn.style.display = 'none';
+
+  // Focus textarea
+  const textarea = contentEl.querySelector('textarea');
+  textarea.focus();
+}
+
+function cancelItemEdit(index) {
+  // Just re-render everything to restore state
+  renderFeed(currentEvents);
+}
+
+async function saveItem(index) {
+  const itemEl = document.getElementById(`event-${index}`);
+  const textarea = itemEl.querySelector('textarea');
+  const newText = textarea.value.trim();
+
+  if (!newText) {
+    if(!confirm("Saving empty text will remove this entry. Continue?")) return;
+    // Remove item
+    currentEvents.splice(index, 1);
+  } else {
+    // Update item
+    currentEvents[index].text = newText;
+  }
+
+  try {
+    // Use the PUT endpoint to update the whole list
+    await fetch(`${API_BASE}/inbox`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events: currentEvents, date: currentDate })
+    });
+    
+    loadInbox(); // Reload to confirm state
+  } catch (err) {
+    alert('Failed to save entry: ' + err.message);
+  }
+}
+
 
 async function toggleEditMode() {
   if (isEditMode) {
@@ -135,14 +218,14 @@ async function toggleEditMode() {
     return;
   }
   
-  const confirmLoad = confirm("This will load all entries into the editor and overwrite the current day's inbox upon saving. Continue?");
+  const confirmLoad = confirm("This will load all entries into the main editor for BULK editing. Continue?");
   if (!confirmLoad) return;
 
   isEditMode = true;
   els.editModeBtn.textContent = 'Cancel Edit';
   els.editModeBtn.classList.add('active');
   els.submitBtn.textContent = 'Overwrite Inbox (Ctrl+Enter)';
-  els.submitBtn.classList.add('warning-btn'); // You might want to add style for this
+  els.submitBtn.classList.add('warning-btn'); 
   
   // Reconstruct text
   const rawTexts = Array.from(items).map(el => el.dataset.raw).join('\n');
@@ -224,7 +307,6 @@ function parseSection(text) {
 
 
 async function compileEntry() {
-  // Simple prompt for now (could be a modal later)
   const defaultTitle = `Dev-Diary Entry ${currentDate}`;
   const userSuffix = prompt("Entry Title Suffix (optional):", "");
   
@@ -236,12 +318,10 @@ async function compileEntry() {
   let allowedTopics = "tooling, prompts, automation, site-build, content-pipeline, experiments, failures, learnings, open-threads, research";
   try {
     const cfg = await fetch(`${API_BASE}/config`).then(r => r.json());
-    // Assuming backend config API might expose rules later, but for now we hardcode or rely on known list.
-    // Actually, let's just make the prompt helpful.
   } catch (e) {}
 
   const topics = prompt(
-    `Topics (comma separated):\n\nAllowed: ${allowedTopics}`, 
+    `Topics (comma separated):\n\nAllowed: ${allowedTopics}`,
     "tooling"
   );
   if (topics === null) return;
@@ -253,7 +333,7 @@ async function compileEntry() {
     const res = await fetch(`${API_BASE}/compile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         date: currentDate,
         title: finalTitle,
         topics: topics || "tooling"

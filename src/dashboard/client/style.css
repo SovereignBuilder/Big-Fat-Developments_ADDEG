@@ -82,5 +82,13 @@ button:hover { opacity: 0.8; }
 .feed-item.observations { border-left-color: #ff9800; }
 .feed-item.openThreads { border-left-color: #e91e63; }
 
-.meta { font-size: 0.75rem; color: var(--text-color); opacity: 0.6; margin-bottom: 0.25rem; display: flex; justify-content: space-between; }
+.meta { font-size: 0.75rem; color: var(--text-color); opacity: 0.6; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
 .content { font-size: 0.95rem; line-height: 1.4; white-space: pre-wrap; }
+
+/* Inline Editing */
+.edit-btn { background: none; border: none; cursor: pointer; opacity: 1; font-size: 1.1rem; padding: 0 0.5rem; color: var(--text-color); }
+.edit-btn:hover { opacity: 1; transform: scale(1.2); color: #007bff; }
+.inline-editor { width: 100%; min-height: 60px; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color); font-family: inherit; font-size: 0.95rem; }
+.inline-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; justify-content: flex-end; }
+.save-btn { background: #4caf50; color: white; padding: 0.3rem 0.8rem; font-size: 0.85rem; }
+.cancel-btn { background: var(--border-color); color: var(--text-color); padding: 0.3rem 0.8rem; font-size: 0.85rem; }
