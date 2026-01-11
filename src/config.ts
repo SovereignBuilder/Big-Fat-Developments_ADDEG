@@ -25,6 +25,7 @@ export interface DashboardConfig {
   host: string;
   autoOpen: boolean;
   title: string;
+  defaultCollection?: string;
 }
 
 export type AddegConfig = {
@@ -104,4 +105,3 @@ export async function writePresetFiles(opts: { preset: string; force: boolean })
     }
   }
 }
-

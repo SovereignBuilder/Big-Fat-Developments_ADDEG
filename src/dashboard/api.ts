@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { AddegConfig } from "../config.js";
-import { appendEventText, readInboxEvents } from "../inbox.js";
-import { todayYmd } from "../utils.js";
+import { appendEventText, readInboxEvents, getInboxMetadata } from "../inbox.js";
+import { todayYmd, openPath } from "../utils.js";
 
 interface RouteOptions {
   cfg: AddegConfig;
@@ -9,12 +9,18 @@ interface RouteOptions {
 
 export async function dashboardRoutes(fastify: FastifyInstance, options: RouteOptions) {
   const { cfg } = options;
+  const collectionKeys = Object.keys(cfg.collections);
+  const defaultCollection =
+    cfg.dashboard?.defaultCollection ||
+    (cfg.collections.devDiary ? "devDiary" : collectionKeys[0]);
 
   // GET /api/config - Get dashboard config
   fastify.get("/api/config", async () => {
     return {
       title: cfg.dashboard?.title || "ADDEG Dashboard",
-      collections: Object.keys(cfg.collections),
+      collections: collectionKeys,
+      defaultCollection,
+      topicsAllowed: cfg.collections[defaultCollection]?.rules?.topics?.allowed || [],
     };
   });
 
@@ -22,7 +28,8 @@ export async function dashboardRoutes(fastify: FastifyInstance, options: RouteOp
   fastify.get<{ Querystring: { date?: string } }>("/api/inbox", async (request) => {
     const date = request.query.date || todayYmd();
     const events = await readInboxEvents({ cfg, date });
-    return { date, events };
+    const meta = await getInboxMetadata({ cfg, date });
+    return { date, events, meta };
   });
 
   // POST /api/inbox - Add new item (Append)
@@ -70,7 +77,9 @@ export async function dashboardRoutes(fastify: FastifyInstance, options: RouteOp
   });
 
   // POST /api/compile - Compile entry
-  fastify.post<{ Body: { date?: string; title?: string; topics?: string; collection?: string } }>("/api/compile", async (request) => {
+  fastify.post<{ Body: { date?: string; title?: string; topics?: string; collection?: string } }>(
+    "/api/compile",
+    async (request, reply) => {
     const { date, title, topics, collection } = request.body;
     
     const { compileEntry } = await import("../compiler.js");
@@ -109,19 +118,26 @@ export async function dashboardRoutes(fastify: FastifyInstance, options: RouteOp
     // If empty after stripping, default to "Daily Log" or empty?
     if (!effectiveSuffix) effectiveSuffix = "Daily Log";
 
-    const result = await compileEntry({
-      cfg,
-      date: targetDate,
-      collectionKey: collection || "devDiary",
-      titleSuffix: effectiveSuffix,
-      topicsCsv: topics || "general",
-    });
+    const collectionKey = collection || defaultCollection;
+
+    let result: { outputPath: string };
+    try {
+      result = await compileEntry({
+        cfg,
+        date: targetDate,
+        collectionKey,
+        titleSuffix: effectiveSuffix,
+        topicsCsv: topics || "general",
+      });
+    } catch (err) {
+      request.log.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ success: false, message });
+    }
 
     // Auto-open the compiled file
     try {
-      // Import open dynamically
-      const open = (await import("open")).default;
-      await open(result.outputPath);
+      await openPath(result.outputPath);
     } catch (err) {
       // Ignore open errors, just return path
       request.log.error(err);

@@ -7,6 +7,7 @@ const offsetMs = d.getTimezoneOffset() * 60 * 1000;
 const localIso = new Date(d.getTime() - offsetMs).toISOString().split('T')[0];
 let currentDate = localIso;
 let currentEvents = []; // Store events locally for inline editing
+let currentMeta = null; // Store metadata (title, topics)
 
 // DOM Elements
 const els = {
@@ -18,9 +19,16 @@ const els = {
   submitBtn: document.getElementById('submit-btn'),
   quickActions: document.querySelectorAll('.quick-actions button'),
   feedList: document.getElementById('feed-list'),
+  feedFilter: document.getElementById('feed-filter'),
   themeToggle: document.getElementById('theme-toggle'),
   compileBtn: document.getElementById('compile-btn'),
   editModeBtn: document.getElementById('edit-mode-btn'),
+  compileModal: document.getElementById('compile-modal'),
+  compileTitleSuffix: document.getElementById('compile-title-suffix'),
+  compileTopics: document.getElementById('compile-topics'),
+  compileTopicsHelp: document.getElementById('compile-topics-help'),
+  compileCancelBtn: document.getElementById('compile-cancel-btn'),
+  compileConfirmBtn: document.getElementById('compile-confirm-btn'),
 };
 
 // State
@@ -43,12 +51,13 @@ async function init() {
 
   // Event Listeners
   els.submitBtn.addEventListener('click', submitNote);
-  els.compileBtn.addEventListener('click', compileEntry);
+  els.compileBtn.addEventListener('click', openCompileModal);
   els.editModeBtn.addEventListener('click', toggleEditMode);
   els.themeToggle.addEventListener('click', toggleTheme);
   els.dateInput.addEventListener('change', (e) => setDate(e.target.value));
   els.prevDate.addEventListener('click', () => adjustDate(-1));
   els.nextDate.addEventListener('click', () => adjustDate(1));
+  els.feedFilter.addEventListener('change', () => renderFeed(currentEvents));
   
   // Feed Delegation for Inline Edit
   els.feedList.addEventListener('click', handleFeedClick);
@@ -76,6 +85,30 @@ async function init() {
   els.noteInput.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key === 'Enter') submitNote();
   });
+
+  // Compile modal
+  if (els.compileModal && els.compileCancelBtn && els.compileConfirmBtn) {
+    els.compileCancelBtn.addEventListener('click', closeCompileModal);
+    els.compileConfirmBtn.addEventListener('click', compileFromModal);
+
+    els.compileModal.addEventListener('click', (e) => {
+      if (e.target === els.compileModal) closeCompileModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (els.compileModal.classList.contains('hidden')) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeCompileModal();
+      } else if (e.key === 'Enter') {
+        const active = document.activeElement;
+        const isTextInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+        if (!isTextInput) return;
+        e.preventDefault();
+        compileFromModal();
+      }
+    });
+  }
 }
 
 function setDate(dateStr) {
@@ -96,6 +129,7 @@ async function loadInbox() {
     const res = await fetch(`${API_BASE}/inbox?date=${currentDate}`);
     const data = await res.json();
     currentEvents = data.events || [];
+    currentMeta = data.meta || null;
     renderFeed(currentEvents);
   } catch (err) {
     els.feedList.innerHTML = `<p class="error">Error loading inbox: ${err.message}</p>`;
@@ -108,12 +142,24 @@ function renderFeed(events) {
     return;
   }
 
+  const filter = els.feedFilter ? els.feedFilter.value : 'all';
+
+  function formatLocalTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }
+
   els.feedList.innerHTML = events.map((e, index) => {
+    // Filter check
+    if (filter !== 'all' && e.section !== filter) return '';
+
     // Map standard sections to short prefixes for reconstruction
     const map = { context: 'ctx:', actions: 'act:', observations: 'obs:', openThreads: 'open:' };
     const prefix = map[e.section] || 'act:';
     
-    const time = e.ts.includes('T') ? e.ts.split('T')[1].slice(0, 5) : e.ts;
+    const time = formatLocalTime(e.ts) || e.ts;
     return `
       <div class="feed-item ${e.section}" id="event-${index}" data-index="${index}" data-raw="${prefix} ${escapeHtml(e.text)}">
         <div class="meta">
@@ -306,25 +352,56 @@ function parseSection(text) {
 }
 
 
-async function compileEntry() {
+function openCompileModal() {
+  if (!els.compileModal || !els.compileTitleSuffix || !els.compileTopics) {
+    alert("Compile UI not available (missing modal elements).");
+    return;
+  }
+
+  // Defaults or from Meta
+  if (currentMeta) {
+    els.compileTitleSuffix.value = currentMeta.titleSuffix || '';
+    els.compileTopics.value = currentMeta.topicsCsv || 'tooling';
+  } else {
+    els.compileTitleSuffix.value = '';
+    // Only reset topics if empty, otherwise keep previous value or default
+    if (!els.compileTopics.value) els.compileTopics.value = 'tooling';
+  }
+
+  // Fetch config to show allowed topics (best effort)
+  (async () => {
+    try {
+      const cfg = await fetch(`${API_BASE}/config`).then(r => r.json());
+      if (els.compileTopicsHelp) {
+        if (Array.isArray(cfg.topicsAllowed) && cfg.topicsAllowed.length) {
+          els.compileTopicsHelp.textContent = `Allowed topics: ${cfg.topicsAllowed.join(", ")}`;
+        } else {
+          els.compileTopicsHelp.textContent = '';
+        }
+      }
+    } catch (e) {
+      if (els.compileTopicsHelp) els.compileTopicsHelp.textContent = '';
+    }
+  })();
+
+  els.compileModal.classList.remove('hidden');
+  els.compileTitleSuffix.focus();
+}
+
+function closeCompileModal() {
+  if (!els.compileModal) return;
+  els.compileModal.classList.add('hidden');
+}
+
+async function compileFromModal() {
+  if (!els.compileTitleSuffix || !els.compileTopics) return;
+
   const defaultTitle = `Dev-Diary Entry ${currentDate}`;
-  const userSuffix = prompt("Entry Title Suffix (optional):", "");
-  
-  if (userSuffix === null) return; // cancelled
+  const suffix = String(els.compileTitleSuffix.value || '').trim();
+  const finalTitle = suffix ? `${defaultTitle} - ${suffix}` : defaultTitle;
+  const topics = String(els.compileTopics.value || '').trim() || 'tooling';
 
-  const finalTitle = userSuffix ? `${defaultTitle} - ${userSuffix}` : defaultTitle;
-  
-  // Fetch config to show allowed topics
-  let allowedTopics = "tooling, prompts, automation, site-build, content-pipeline, experiments, failures, learnings, open-threads, research";
-  try {
-    const cfg = await fetch(`${API_BASE}/config`).then(r => r.json());
-  } catch (e) {}
-
-  const topics = prompt(
-    `Topics (comma separated):\n\nAllowed: ${allowedTopics}`,
-    "tooling"
-  );
-  if (topics === null) return;
+  closeCompileModal();
 
   try {
     els.compileBtn.disabled = true;
@@ -333,19 +410,25 @@ async function compileEntry() {
     const res = await fetch(`${API_BASE}/compile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        date: currentDate,
-        title: finalTitle,
-        topics: topics || "tooling"
-      })
+      body: JSON.stringify({ date: currentDate, title: finalTitle, topics })
     });
-    
-    const data = await res.json();
-    if (data.success) {
-      alert(`Entry compiled successfully!\nSaved to: ${data.path}`);
-    } else {
-      alert('Compile failed');
+
+    const raw = await res.text();
+    let data = null;
+    try { data = JSON.parse(raw); } catch (e) {}
+
+    if (!res.ok) {
+      const msg = data?.message || data?.error || raw || `HTTP ${res.status}`;
+      throw new Error(msg);
     }
+
+    if (data?.success) {
+      alert(`Entry compiled successfully!\nSaved to: ${data.path}`);
+      return;
+    }
+
+    const msg = data?.message || 'Compile failed';
+    throw new Error(msg);
   } catch (err) {
     alert('Error compiling entry: ' + err.message);
   } finally {

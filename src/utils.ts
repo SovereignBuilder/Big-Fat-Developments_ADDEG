@@ -1,11 +1,8 @@
-import { spawn } from "node:child_process";
+import open from "open";
 
 export function nowIso(): string {
-  // Return local ISO string instead of UTC
-  const d = new Date();
-  const offsetMs = d.getTimezoneOffset() * 60 * 1000;
-  const localDate = new Date(d.getTime() - offsetMs);
-  return localDate.toISOString();
+  // Store canonical UTC timestamps. Consumers (dashboard/compiler) should render in local time.
+  return new Date().toISOString();
 }
 
 export function todayYmd(): string {
@@ -30,24 +27,19 @@ export function slugify(value: string): string {
 }
 
 export async function openPath(path: string): Promise<void> {
-  // Windows-friendly; falls back gracefully on other platforms.
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn("cmd", ["/c", "start", "", path], {
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.on("error", reject);
-      child.on("exit", () => resolve());
-    });
-    return;
+  // @ts-ignore - process.versions might not have electron in pure node types, though usually it's fine.
+  if (process.versions && (process.versions as any).electron) {
+    try {
+      // Dynamic import to avoid load-time error in CLI
+      const { shell } = await import("electron");
+      await shell.openPath(path);
+      return;
+    } catch (err) {
+      // Fallback if electron import fails for some reason
+      // eslint-disable-next-line no-console
+      console.error("Failed to use electron.shell.openPath:", err);
+    }
   }
 
-  const opener = process.platform === "darwin" ? "open" : "xdg-open";
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(opener, [path], { stdio: "ignore" });
-    child.on("error", reject);
-    child.on("exit", () => resolve());
-  });
+  await open(path);
 }
-

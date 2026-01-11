@@ -13,10 +13,13 @@ if not exist "node_modules" (
     call npm install
 )
 
-REM Check if dist exists
-if not exist "dist\electron\main.js" (
-    echo Building project...
-    call npm run build
+REM Always build to keep dist in sync with src
+echo Building project...
+call npm run build
+if %errorlevel% neq 0 (
+    echo Build failed.
+    pause
+    exit /b 1
 )
 
 REM Start Electron

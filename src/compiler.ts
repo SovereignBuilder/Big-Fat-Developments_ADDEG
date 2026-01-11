@@ -2,17 +2,19 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AddegConfig, CollectionConfig, CollectionRules } from "./config.js";
-import { readInboxEvents } from "./inbox.js";
+import { readInboxEvents, saveInboxMetadata } from "./inbox.js";
 import { slugify, toYmd } from "./utils.js";
 
 type SectionBuckets = {
-  context: string[];
-  actions: string[];
-  observations: string[];
-  openThreads: string[];
+  context: Array<{ ts?: string; text: string }>;
+  actions: Array<{ ts?: string; text: string }>;
+  observations: Array<{ ts?: string; text: string }>;
+  openThreads: Array<{ ts?: string; text: string }>;
 };
 
-function bucketize(events: Array<{ section: keyof SectionBuckets; text: string }>): SectionBuckets {
+function bucketize(
+  events: Array<{ section: keyof SectionBuckets; text: string; ts?: string }>
+): SectionBuckets {
   const buckets: SectionBuckets = {
     context: [],
     actions: [],
@@ -20,14 +22,65 @@ function bucketize(events: Array<{ section: keyof SectionBuckets; text: string }
     openThreads: [],
   };
   for (const e of events) {
-    buckets[e.section].push(e.text);
+    buckets[e.section].push({ ts: e.ts, text: e.text });
   }
   return buckets;
 }
 
-function renderBullets(items: string[]): string {
+function renderTime(ts?: string): string | null {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderBullets(items: Array<{ ts?: string; text: string }>): string {
   if (!items.length) return "- (none)";
-  return items.map((t) => `- ${t}`).join("\n");
+  return items
+    .map((item) => {
+      const t = renderTime(item.ts);
+      const prefix = t ? `${t} ` : "";
+      return `- ${prefix}${item.text}`;
+    })
+    .join("\n");
+}
+
+function sectionLabel(section: keyof SectionBuckets): string {
+  switch (section) {
+    case "context":
+      return "Context";
+    case "actions":
+      return "Action";
+    case "observations":
+      return "Observation";
+    case "openThreads":
+      return "Open Thread";
+  }
+}
+
+function renderTimeline(
+  events: Array<{ section: keyof SectionBuckets; text: string; ts?: string }>
+): string {
+  if (!events.length) return "- (none)";
+  const sorted = events
+    .map((e, index) => ({ ...e, index }))
+    .sort((a, b) => {
+      const ta = a.ts ? new Date(a.ts).getTime() : Number.POSITIVE_INFINITY;
+      const tb = b.ts ? new Date(b.ts).getTime() : Number.POSITIVE_INFINITY;
+      if (Number.isNaN(ta) && Number.isNaN(tb)) return a.index - b.index;
+      if (Number.isNaN(ta)) return 1;
+      if (Number.isNaN(tb)) return -1;
+      if (ta !== tb) return ta - tb;
+      return a.index - b.index;
+    });
+
+  return sorted
+    .map((e) => {
+      const t = renderTime(e.ts);
+      const timePart = t ? `${t} ` : "";
+      return `- ${timePart}(${sectionLabel(e.section)}) ${e.text}`;
+    })
+    .join("\n");
 }
 
 function clampExcerpt(text: string, rule?: { min: number; max: number }): string {
@@ -125,14 +178,17 @@ export async function compileEntry(opts: {
   const topics = normalizeTopicsCsv(opts.topicsCsv);
 
   const events = await readInboxEvents({ cfg: opts.cfg, date });
-  const buckets = bucketize(
-    events.map((e) => ({ section: e.section as keyof SectionBuckets, text: e.text }))
-  );
+  const normalizedEvents = events.map((e) => ({
+    section: e.section as keyof SectionBuckets,
+    text: e.text,
+    ts: e.ts,
+  }));
+  const buckets = bucketize(normalizedEvents);
 
   const excerptSeed =
-    buckets.actions[0] ||
-    buckets.observations[0] ||
-    buckets.context[0] ||
+    buckets.actions[0]?.text ||
+    buckets.observations[0]?.text ||
+    buckets.context[0]?.text ||
     `Dev Diary entry for ${date}.`;
 
   const excerpt = clampExcerpt(excerptSeed, collection.rules?.excerpt);
@@ -162,6 +218,7 @@ export async function compileEntry(opts: {
     actions: renderBullets(buckets.actions),
     observations: renderBullets(buckets.observations),
     openThreads: renderBullets(buckets.openThreads),
+    timeline: renderTimeline(normalizedEvents),
   };
 
   const rendered = fillTemplate(template, vars).trimEnd() + "\n";
@@ -172,6 +229,16 @@ export async function compileEntry(opts: {
   const slug = slugify(`${date}-${opts.titleSuffix}`) || `${date}-dev-diary`;
   const outPath = resolve(outDir, `${slug}.md`);
   await writeFile(outPath, rendered, "utf8");
+
+  // Persist metadata for future re-compiles
+  await saveInboxMetadata({
+    cfg: opts.cfg,
+    date: date,
+    metadata: {
+      titleSuffix: opts.titleSuffix,
+      topicsCsv: opts.topicsCsv
+    }
+  });
 
   return { outputPath: outPath };
 }

@@ -38,7 +38,8 @@
       "node_modules/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "dev_diary_app.ico"
     }
   },
   "engines": {

@@ -6,6 +6,9 @@ topics: {{topics}}
 draft: {{draft}}
 ---
 
+## Timeline
+{{timeline}}
+
 ## Context
 {{context}}
 
@@ -20,4 +23,3 @@ draft: {{draft}}
 
 **Boundary Reminder:**  
 Seeds. No maintenance. No roadmap.
-

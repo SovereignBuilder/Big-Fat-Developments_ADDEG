@@ -14,7 +14,7 @@ export async function startDashboard(configPath?: string, opts: { skipOpen?: boo
   const dashboardCfg = cfg.dashboard || {
     enabled: true,
     port: 7825,
-    host: "localhost",
+    host: "127.0.0.1",
     autoOpen: true,
     title: "ADDEG Dashboard",
   };

@@ -1,12 +1,13 @@
-import { mkdir, readFile, appendFile } from "node:fs/promises";
+import { mkdir, readFile, appendFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import type { AddegConfig } from "./config.js";
+import YAML from "yaml";
+import type { AddegConfig, CollectionConfig } from "./config.js";
 import { nowIso, todayYmd, toYmd } from "./utils.js";
 
-export type InboxSection = "context" | "actions" | "observations" | "openThreads";
+export type InboxSection = "context" | "actions" | "observations" | "openThreads" | "meta";
 
 export type InboxEvent = {
   ts: string;
@@ -44,6 +45,77 @@ function parseSectionFromText(text: string): { section: InboxSection; cleaned: s
 function inboxPath(cfg: AddegConfig, date: string): string {
   const ymd = toYmd(date || todayYmd());
   return resolve(cfg.repoRoot, cfg.inboxDir, `${ymd}.jsonl`);
+}
+
+function resolveOutputDir(collection: CollectionConfig): string {
+  const out = collection.outputDir;
+  if (/^[a-zA-Z]:[\\/]/.test(out) || out.startsWith("/")) return out;
+  return resolve(process.cwd(), out);
+}
+
+async function scanForOutputFile(dir: string, dateYmd: string): Promise<string | null> {
+  try {
+    if (!existsSync(dir)) return null;
+    const files = await readdir(dir);
+    // Find file starting with dateYmd and ending in .md
+    // We sort by length descending to match longest valid name if multiple (unlikely)
+    const match = files
+      .filter(f => f.startsWith(dateYmd) && f.endsWith(".md"))
+      .sort((a, b) => b.length - a.length)[0];
+    
+    if (match) return resolve(dir, match);
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
+async function getMetadataFromOutput(cfg: AddegConfig, date: string): Promise<Record<string, any>> {
+  const ymd = toYmd(date);
+  const foundMeta: Record<string, any> = {};
+
+  for (const col of Object.values(cfg.collections)) {
+    const outDir = resolveOutputDir(col);
+    const filePath = await scanForOutputFile(outDir, ymd);
+    
+    if (filePath) {
+      try {
+        const content = await readFile(filePath, "utf8");
+        const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (match) {
+          const frontmatter = YAML.parse(match[1]);
+          
+          if (frontmatter.title) {
+            // Reverse engineer the suffix
+            // If title is "2026-01-09 - My Title", suffix is "My Title"
+            // If title is "My Title", suffix is "My Title"
+            const prefix = `${ymd} - `;
+            if (String(frontmatter.title).startsWith(prefix)) {
+              foundMeta.titleSuffix = String(frontmatter.title).slice(prefix.length).trim();
+            } else {
+              foundMeta.titleSuffix = String(frontmatter.title);
+            }
+          }
+          
+          if (frontmatter.topics) {
+            if (Array.isArray(frontmatter.topics)) {
+              foundMeta.topicsCsv = frontmatter.topics.join(", ");
+            } else {
+               foundMeta.topicsCsv = String(frontmatter.topics);
+            }
+          }
+          
+          // Break after finding first valid file? 
+          // Usually we only have one dev diary per day.
+          break;
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+  }
+  
+  return foundMeta;
 }
 
 export async function appendEventText(opts: {
@@ -105,12 +177,69 @@ export async function readInboxEvents(opts: {
     if (!trimmed) continue;
     try {
       const parsed = JSON.parse(trimmed) as InboxEvent;
-      if (parsed && parsed.ts && parsed.section && parsed.text) events.push(parsed);
+      if (parsed && parsed.ts && parsed.section && parsed.text) {
+        if (parsed.section === "meta") continue; // Skip metadata events in standard read
+        events.push(parsed);
+      }
     } catch {
       // ignore malformed lines
     }
   }
   return events;
+}
+
+export async function saveInboxMetadata(opts: {
+  cfg: AddegConfig;
+  date: string;
+  metadata: Record<string, any>;
+}): Promise<void> {
+  const filePath = inboxPath(opts.cfg, opts.date);
+  await mkdir(dirname(filePath), { recursive: true });
+
+  // simple append - last write wins strategy for metadata
+  const event: InboxEvent = {
+    ts: nowIso(),
+    date: toYmd(opts.date),
+    section: "meta" as InboxSection,
+    text: JSON.stringify(opts.metadata),
+  };
+
+  await appendFile(filePath, `${JSON.stringify(event)}\n`, "utf8");
+}
+
+export async function getInboxMetadata(opts: {
+  cfg: AddegConfig;
+  date: string;
+}): Promise<Record<string, any> | null> {
+  const filePath = inboxPath(opts.cfg, opts.date);
+  
+  let lastMeta: Record<string, any> | null = null;
+  
+  // 1. Read from JSONL first (if exists)
+  if (existsSync(filePath)) {
+    const raw = await readFile(filePath, "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+        const parsed = JSON.parse(trimmed) as InboxEvent;
+        if (parsed.section === "meta" as InboxSection) {
+            lastMeta = JSON.parse(parsed.text);
+        }
+        } catch {
+        // ignore
+        }
+    }
+  }
+
+  // 2. Read from Output File (sync) - this overrides JSONL if present
+  const outputMeta = await getMetadataFromOutput(opts.cfg, opts.date);
+  
+  if (outputMeta && Object.keys(outputMeta).length > 0) {
+    lastMeta = { ...lastMeta, ...outputMeta };
+  }
+  
+  return lastMeta;
 }
 
 export async function formatInbox(opts: {
@@ -121,10 +250,16 @@ export async function formatInbox(opts: {
   const ymd = toYmd(opts.date);
   if (!events.length) return `No inbox entries for ${ymd}.`;
 
-  const header = `Inbox (${ymd}) — ${events.length} item(s)\n`;
+  function formatLocalTime(ts: string): string {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return ts;
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  const header = `Inbox (${ymd}) - ${events.length} item(s)\n`;
   const body = events
     .map((e) => {
-      const time = e.ts.includes("T") ? e.ts.split("T")[1]?.slice(0, 5) : e.ts;
+      const time = formatLocalTime(e.ts);
       return `- [${time}] (${e.section}) ${e.text}`;
     })
     .join("\n");

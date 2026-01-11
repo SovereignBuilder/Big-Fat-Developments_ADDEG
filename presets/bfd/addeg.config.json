@@ -4,7 +4,7 @@
   "inboxDir": "./inbox",
   "collections": {
     "devDiary": {
-      "outputDir": "C:/Dev/BFDwebsite/src/content/dev-diary",
+      "outputDir": "./src/content/dev-diary",
       "templatePath": "./templates/default/dev-diary.md",
       "draftDefault": true,
       "rules": {
